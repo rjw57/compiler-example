@@ -12,7 +12,7 @@ void main(string[] argv)
 
 	var a = Ty.function (Ty.int32 (), { Ty.int32 () }, 0);
 	var fac = new Function (m, "fac", a);
-	//fac.call_conv = CallConv.C;
+	fac.call_conv = CallConv.C;
 
 	var entry = fac.append_basic_block("entry");
 	var iftrue = fac.append_basic_block("iftrue");
