@@ -27,7 +27,7 @@ macro(_llvm_config _var_name)
 	endif(NOT _llvm_config_exe)
 endmacro(_llvm_config)
 
-set(_llvm_components all)
+set(_llvm_components jit interpreter native)
 
 _llvm_config(LLVM_C_FLAGS --cflags ${_llvm_components})
 _llvm_config(LLVM_CXX_FLAGS --cxxflags ${_llvm_components})

@@ -5,8 +5,8 @@ void main(string[] argv)
 {
 	link_in_interpreter ();
 	link_in_jit ();
-	initialize_all_targets ();
-	initialize_all_target_infos ();
+	initialize_native_target ();
+//	initialize_all_target_infos ();
 
 	var m = new Module.with_name ("fac_module");
 
