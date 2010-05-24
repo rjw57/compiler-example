@@ -1,0 +1,25 @@
+def void_func_1 {
+}
+
+def void_func_2 {
+	ret;
+}
+
+def void_func_3 : void {
+	ret;
+}
+
+def void_func_4 : void {
+	ret;
+}
+
+def float_func : float {
+	ret 1.;
+}
+
+# The 'main' function will be called first in the program.
+def main : float {
+	ret 0.3;
+}
+
+# vim:sw=4:ts=4:autoindent

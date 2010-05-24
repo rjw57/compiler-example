@@ -20,6 +20,7 @@ class Compiler {
 
 	// Special reserved word symbol values.
 	private const string DEFINE_FUNCTION = "DEFINE_FUNCTION";
+	private const string RETURN = "RETURN";
 
 	private LLVM.Module 		m_llvm_module = null;
 	private unowned Scanner		m_current_scanner = null;
@@ -66,6 +67,7 @@ class Compiler {
 
 		// There are some reserved words (aka 'symbols') in our language.
 		scanner.scope_add_symbol(0, "def", DEFINE_FUNCTION);
+		scanner.scope_add_symbol(0, "ret", RETURN);
 
 		// set this as the current scanner.
 		m_current_scanner = scanner;
@@ -79,6 +81,7 @@ class Compiler {
 
 		// Add our standard types
 		llvm_module.add_type_name("void", Ty.void());
+		llvm_module.add_type_name("float", Ty.float());
 
 		parse_translation_unit();
 
@@ -115,6 +118,23 @@ class Compiler {
 		m_token_position.column = m_current_scanner.cur_position();
 	}
 
+	private bool check_token(TokenType expected_type, void* expected_symbol = null)
+	{
+		assert(m_current_scanner != null);
+		assert((expected_symbol == null) || (expected_type == TokenType.SYMBOL));
+
+		if((m_token_type != expected_type) ||
+				((expected_symbol != null) && 
+				 	(m_token_value.symbol != expected_symbol))) {
+			m_current_scanner.unexp_token(expected_type,
+					"identifier", "reserved word",
+					m_token_value.identifier,
+					null, true);
+			return false;
+		}
+		return true;
+	}
+
 	// PARSING METHODS //
 
 	// parse an entire translation unit (aka an entire file)
@@ -135,7 +155,7 @@ class Compiler {
 	// parse a top-level function declaration
 	private void parse_top_level_declaration() throws CompileError
 	{
-		if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == DEFINE_FUNCTION)) {
+		if(check_token(TokenType.SYMBOL, DEFINE_FUNCTION)) {
 			// starting to define a function.
 			next_token();
 
@@ -153,10 +173,8 @@ class Compiler {
 			m_function = new Function(llvm_module, func_decl.name, func_decl.llvm_type); 
 			m_function.call_conv = CallConv.C;
 
-			next_token();
-
 			// parse function block.
-			var func_block = parse_block();
+			parse_block();
 
 			// we've now moved out of the function.
 			m_function = null;
@@ -165,30 +183,60 @@ class Compiler {
 		}
 	}
 
+	// parse a function declaration
 	private FuncDecl parse_function_declaration() throws CompileError
 	{
 		FuncDecl decl = { null, null };
 
 		// expect an identifier naming the function.
-		if(m_token_type == TokenType.IDENTIFIER) {
-		} else {
+		if(!check_token(TokenType.IDENTIFIER)) {
 			throw new CompileError.PARSE_ERROR("Expected identifier which names the function.");
 		}
 
 		decl.name = m_token_value.identifier;
-		decl.llvm_type = 
-			Ty.function( llvm_module.get_type_by_name("void"), { }, 0 );
+		
+		next_token();
+
+		// Do we have a return type specified?
+		Ty* return_type = llvm_module.get_type_by_name("void");
+		if(m_token_type == ':') {
+			next_token();
+
+			// get the type name
+			return_type = parse_type_name();
+		}
+
+		decl.llvm_type = Ty.function( return_type, { }, 0 );
 
 		return decl;
+	}
+
+	private LLVM.Ty* parse_type_name() throws CompileError
+	{
+		if(!check_token(TokenType.IDENTIFIER)) {
+				throw new CompileError.PARSE_ERROR("Expecting identifier to name type.");
+		}
+
+		Ty* type = llvm_module.get_type_by_name(m_token_value.identifier);
+
+		if(type == null) {
+			throw new CompileError.PARSE_ERROR("Unknown type name '%s'.", 
+					m_token_value.identifier);
+		}
+		
+		next_token();
+
+		return type;
 	}
 
 	private LLVM.BasicBlock parse_block() throws CompileError
 	{
 		assert(m_function != null);
 
-		if(m_token_type != TokenType.LEFT_CURLY) {
+		if(!check_token(TokenType.LEFT_CURLY)) {
 			throw new CompileError.PARSE_ERROR("Expected a '{' to start a block.");
 		}
+		next_token();
 
 		// append the new basic block.
 		var basic_block = m_function.append_basic_block("entry");
@@ -196,10 +244,9 @@ class Compiler {
 		m_builder.position_at_end(basic_block);
 
 		// parse function block.
-		next_token();
 		while(m_token_type != TokenType.RIGHT_CURLY) {
 			// parse statements.
-			next_token();
+			parse_statement();
 		}
 
 		// terminate the basic block if appropriate
@@ -227,6 +274,78 @@ class Compiler {
 		m_builder = null;
 
 		return basic_block;
+	}
+	
+	private void parse_statement() throws CompileError
+	{
+		// statements are terminated by semi-colon.
+		while(m_token_type != ';') {
+			if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == RETURN)) {
+				// return statement
+				parse_return_statement();
+			} else {
+				throw new CompileError.PARSE_ERROR("Error parsing statement.");
+			}
+		}
+
+		// chomp semi-colon
+		next_token();
+	}
+	
+	private void parse_return_statement() throws CompileError
+	{
+		assert(m_builder != null);
+
+		// begin with 'ret'
+		if(!check_token(TokenType.SYMBOL, RETURN)) {
+			throw new CompileError.PARSE_ERROR("Error parsing return statement.");
+		}
+		next_token();
+
+		// find the return type of the current function.
+		var func_type = m_function.type_of();
+		assert(func_type->get_type_kind() == TypeKind.Pointer);
+
+		func_type = func_type->get_element_type();
+		assert(func_type->get_type_kind() == TypeKind.Function);
+
+		var ret_type = func_type->get_return_type();
+
+		// if no expression, then check we're ok to return void.
+		if(m_token_type == ';') {
+			if(ret_type->get_type_kind() != TypeKind.Void) {
+				throw new CompileError.PARSE_ERROR(
+						"Attempt to return void from non-void function.");
+			}
+			m_builder.build_ret_void();
+			return;
+		}
+
+		// we expect some expression
+		var expr = parse_expression();
+
+		// check types match
+		if(ret_type->get_type_kind() != expr.type_of()->get_type_kind()) {
+			throw new CompileError.PARSE_ERROR(
+					"Invalid expression in return statement. Type must match return type of function.");
+		}
+
+		m_builder.build_ret(expr);
+	}
+
+	private LLVM.Value parse_expression() throws CompileError
+	{
+		LLVM.Value ret_val = null;
+
+		// only support floating point constants ATM.
+		if(m_token_type == TokenType.FLOAT) {
+			ret_val = Constant.const_real( Ty.float(), m_token_value.float );
+		} else {
+			throw new CompileError.PARSE_ERROR("Error parsing expression.");
+		}
+		next_token();
+
+		return ret_val;
 	}
 }
 
@@ -275,7 +394,7 @@ void main(string[] argv)
 			}
 			
 			GenericValue exec_res = ee.run_function (main, { });
-			message ("result %u", exec_res.to_int (0));
+			message ("result %lf", exec_res.to_float (Ty.float()));
 		} catch (CompileError e) {
 			stderr.printf("%s: %s\n", c.cur_position_string(), e.message);
 		}

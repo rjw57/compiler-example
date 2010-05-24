@@ -1,0 +1,5 @@
+# The 'main' function will be called first in the program.
+def main : void {
+}
+
+# vim:sw=4:ts=4:autoindent
