@@ -18,6 +18,7 @@
 # LLVM_C_FLAGS      - All flags that should be passed to a C compiler. 
 # LLVM_CXX_FLAGS    - All flags that should be passed to a C++ compiler.
 # LLVM_CPP_FLAGS    - All flags that should be passed to the C pre-processor.
+# LLVM_LD_FLAGS     - Additional flags to pass to the linker.
 # LLVM_LIBRARY_DIRS - A list of directories where the LLVM libraries are located.
 # LLVM_INCLUDE_DIRS - A list of directories where the LLVM headers are located.
 # LLVM_LIBRARIES    - A list of libraries which should be linked against.
@@ -65,6 +66,7 @@ _llvm_config(LLVM_VERSION --version)
 _llvm_config(LLVM_C_FLAGS --cflags ${_llvm_components})
 _llvm_config(LLVM_CXX_FLAGS --cxxflags ${_llvm_components})
 _llvm_config(LLVM_CPP_FLAGS --cppflags ${_llvm_components})
+_llvm_config(LLVM_LD_FLAGS --ldflags ${_llvm_components})
 _llvm_config(LLVM_LIBRARY_DIRS --libdir ${_llvm_components})
 _llvm_config(LLVM_INCLUDE_DIRS --includedir ${_llvm_components})
 _llvm_config(LLVM_LIBRARIES --libs ${_llvm_components})

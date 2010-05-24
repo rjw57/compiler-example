@@ -16,7 +16,7 @@ find_package(PkgConfig)
 # Check LLVM is installed
 find_package(LLVM QUIET REQUIRED COMPONENTS jit native interpreter)
 add_definitions(${LLVM_CPP_FLAGS})
-link_libraries(${LLVM_LIBRARIES})
+link_libraries(${LLVM_LIBRARIES} ${LLVM_LD_FLAGS})
 link_directories(${LLVM_LIBRARY_DIRS})
 include_directories(${LLVM_INCLUDE_DIRS})
 
