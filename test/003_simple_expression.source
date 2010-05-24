@@ -1,0 +1,46 @@
+def sub_expr1 : float {
+	ret ( 0.4 );
+}
+
+def sub_expr2 : float {
+	ret ( ( 0.4 ) );
+}
+
+def sub_expr3 : float {
+	ret 3.0 + 4.0 * 5.0;
+}
+
+def sub_expr4 : float {
+	ret 3.0 + (4.0 * 5.0);
+}
+
+def sub_expr5 : float {
+	ret (3.0 + 4.0) * 5.0;
+}
+
+def sub_expr6 : float {
+	ret 3.0 * 4.0 + 5.0;
+}
+
+def sub_expr7 : float {
+	ret 3.0 * (4.0 + 5.0);
+}
+
+def sub_expr8 : float {
+	ret (3.0 * 4.0) + 5.0;
+}
+
+def sub_expr9 : float {
+	ret (3.0 * +4.0) + 5.0;
+}
+
+def sub_expr10 : float {
+	ret (3.0 * -4.0) + 5.0;
+}
+
+# The 'main' function will be called first in the program.
+def main : float {
+	ret 0.3;
+}
+
+# vim:sw=4:ts=4:autoindent

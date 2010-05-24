@@ -338,27 +338,126 @@ class Compiler {
 		var expr = parse_expression();
 
 		// check types match
-		if(ret_type->get_type_kind() != expr.type_of()->get_type_kind()) {
+		if(ret_type->get_type_kind() != expr->type_of()->get_type_kind()) {
 			throw new CompileError.PARSE_ERROR(
-					"Invalid expression in return statement. Type must match return type of function.");
+					"Invalid expression in return statement. " +
+					"Type must match return type of function.");
 		}
 
 		m_builder.build_ret(expr);
 	}
 
-	private LLVM.Value parse_expression() throws CompileError
+	private void check_compatible_types(LLVM.Value a, LLVM.Value b)  throws CompileError
 	{
-		LLVM.Value ret_val = null;
+		if(a.type_of() != b.type_of()) {
+			throw new CompileError.PARSE_ERROR("Expressions are of incompatible types.");
+		}
+	}
 
-		// only support floating point constants ATM.
-		if(m_token_type == TokenType.FLOAT) {
-			ret_val = Constant.const_real( Ty.float(), m_token_value.float );
+	private bool next_token_is_operator() {
+		return ((m_token_type == '+') || (m_token_type == '-') || 
+				(m_token_type == '*') || (m_token_type == '/'));
+	}
+
+	private int token_precedence(TokenType token) {
+		if((token == '+') || (token == '-'))
+			return 10;
+
+		if((token == '*') || (token == '/'))
+			return 20;
+
+		return 0;
+	}
+
+	// This expression parsing with precedence mechanism is an example of an
+	// operator precedence parser (see
+	// http://en.wikipedia.org/wiki/Operator-precedence_parser ).
+
+	private LLVM.Value* parse_expression() throws CompileError
+	{
+		return parse_expression_1( parse_primary(), 0 );
+	}
+
+	private LLVM.Value* parse_expression_1(LLVM.Value* lhs, int min_precedence) 
+		throws CompileError
+	{
+		while(next_token_is_operator() &&
+				(token_precedence(m_token_type) >= min_precedence))
+		{
+			TokenType op = m_token_type;
+			next_token(); // chomp the operator
+			int op_precedence = token_precedence(op);
+
+			LLVM.Value* rhs = parse_primary();
+
+			while(next_token_is_operator() &&
+				(token_precedence(m_token_type) > op_precedence) )
+			{
+				TokenType lookahead = m_token_type;
+				rhs = parse_expression_1( rhs, token_precedence(lookahead) );
+			}
+
+			if(op == '+') {
+				check_compatible_types(lhs, rhs);
+				lhs = m_builder.build_add(lhs, rhs);
+			} else if(op == '-') {
+				check_compatible_types(lhs, rhs);
+				lhs = m_builder.build_sub(lhs, rhs);
+			} else if(op == '*') {
+				check_compatible_types(lhs, rhs);
+				lhs = m_builder.build_mul(lhs, rhs);
+			} else if(op == '/') {
+				check_compatible_types(lhs, rhs);
+				lhs = m_builder.build_fdiv(lhs, rhs);
+			} else {
+				// should be unreachable.
+				assert(false);
+			}
+		}
+
+		return lhs;
+	}
+	
+	private LLVM.Value* parse_primary() throws CompileError
+	{
+		LLVM.Value* expression = null;
+
+		if(m_token_type == '(') {
+			next_token(); // chomp bracket
+
+			// parse the sub-expression
+			expression = parse_expression();
+			if(!check_token((TokenType)')')) {
+				throw new CompileError.PARSE_ERROR("Error parsing sub-expression.");
+			}
+
+			next_token(); // chomp bracket
+		} else if(m_token_type == TokenType.INT) {
+			expression = Constant.const_real( Ty.int32(), m_token_value.int );
+			next_token();
+		} else if(m_token_type == TokenType.FLOAT) {
+			expression = Constant.const_real( Ty.float(), m_token_value.float );
+			next_token();
+		} else if(m_token_type == '+') {
+			/* nop */
+			next_token();
+			expression = parse_primary();
+		} else if(m_token_type == '-') {
+			/* negate */
+			next_token();
+
+			LLVM.Value* lhs = Constant.const_real( Ty.float(), -1.0 );
+			LLVM.Value* rhs = parse_primary();
+
+			check_compatible_types(lhs, rhs);
+			expression = m_builder.build_mul(lhs, rhs); 
 		} else {
 			throw new CompileError.PARSE_ERROR("Error parsing expression.");
 		}
-		next_token();
 
-		return ret_val;
+		assert(expression != null);
+
+		return expression;
 	}
 }
 
@@ -410,6 +509,8 @@ void main(string[] argv)
 			message ("result %lf", exec_res.to_float (Ty.float()));
 		} catch (CompileError e) {
 			stderr.printf("%s: %s\n", c.cur_position_string(), e.message);
+			if(c.llvm_module != null)
+				c.llvm_module.dump();
 		}
 	}
 }
