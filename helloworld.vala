@@ -278,6 +278,19 @@ class Compiler {
 	
 	private void parse_statement() throws CompileError
 	{
+		assert(m_builder != null);
+
+		// is the block we're inserting into already terminated?
+		var insert_bb = m_builder.get_insert_block();
+		assert(insert_bb != null);
+		var last_inst = insert_bb->get_last_instruction();
+
+		if((last_inst != null) && (last_inst->is_a_terminator_inst())) {
+			// the previous basic block has been terminated, add a new one.
+			var basic_block = m_function.append_basic_block("block");
+			m_builder.position_at_end(basic_block);
+		}
+
 		// statements are terminated by semi-colon.
 		while(m_token_type != ';') {
 			if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == RETURN)) {

@@ -7,9 +7,12 @@ def void_func_2 {
 
 def void_func_3 : void {
 	ret;
+	ret;
 }
 
 def void_func_4 : void {
+	ret;
+	ret;
 	ret;
 }
 
