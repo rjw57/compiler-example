@@ -45,7 +45,7 @@ vala_precompile(HELLOWORLD_C
 CUSTOM_VAPIS
 	LLVM.vapi
 PACKAGES
-	Posix
+	posix
 )
 
 add_executable("hello" ${HELLOWORLD_C})
