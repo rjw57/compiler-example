@@ -13,6 +13,11 @@ class Compiler {
 		uint column;
 	}
 
+	private struct FuncDecl {
+		string 	name;
+		Ty* 	llvm_type;
+	}
+
 	// Special reserved word symbol values.
 	private const string DEFINE_FUNCTION = "DEFINE_FUNCTION";
 
@@ -71,6 +76,10 @@ class Compiler {
 
 		// Start compiling.
 		m_llvm_module = new Module.with_name(scanner.input_name);
+
+		// Add our standard types
+		llvm_module.add_type_name("void", Ty.void());
+
 		parse_translation_unit();
 
 		// Reset the scanner.
@@ -108,6 +117,7 @@ class Compiler {
 
 	// PARSING METHODS //
 
+	// parse an entire translation unit (aka an entire file)
 	private void parse_translation_unit() throws CompileError
 	{
 		assert(llvm_module != null);
@@ -122,6 +132,7 @@ class Compiler {
 		llvm_module.dump();
 	}
 
+	// parse a top-level function declaration
 	private void parse_top_level_declaration() throws CompileError
 	{
 		if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == DEFINE_FUNCTION)) {
@@ -132,15 +143,14 @@ class Compiler {
 			var func_decl = parse_function_declaration();
 
 			// check for an existing function with that name.
-			var f = llvm_module.get_named_function(func_decl);
+			var f = llvm_module.get_named_function(func_decl.name);
 			if(f != null) {
 				throw new CompileError.PARSE_ERROR(
 						"A function named '%s' already exists.", func_decl);
 			}
 
 			// no existing function, create it.
-			m_function = new Function(llvm_module, func_decl, 
-					Ty.function( Ty.void(), { }, 0 ));
+			m_function = new Function(llvm_module, func_decl.name, func_decl.llvm_type); 
 			m_function.call_conv = CallConv.C;
 
 			next_token();
@@ -155,15 +165,21 @@ class Compiler {
 		}
 	}
 
-	private string parse_function_declaration() throws CompileError
+	private FuncDecl parse_function_declaration() throws CompileError
 	{
+		FuncDecl decl = { null, null };
+
 		// expect an identifier naming the function.
 		if(m_token_type == TokenType.IDENTIFIER) {
 		} else {
 			throw new CompileError.PARSE_ERROR("Expected identifier which names the function.");
 		}
 
-		return m_token_value.identifier;
+		decl.name = m_token_value.identifier;
+		decl.llvm_type = 
+			Ty.function( llvm_module.get_type_by_name("void"), { }, 0 );
+
+		return decl;
 	}
 
 	private LLVM.BasicBlock parse_block() throws CompileError
@@ -190,8 +206,23 @@ class Compiler {
 		var bb = m_builder.get_insert_block();
 		var last_inst = bb->get_last_instruction();
 
-		if((last_inst == null) || !last_inst->is_a_terminator_inst())
-			m_builder.build_ret_void();
+		if((last_inst == null) || !last_inst->is_a_terminator_inst()) 
+		{
+			// if we get here, there is no return statement.
+			var func_type = m_function.type_of();
+			assert(func_type->get_type_kind() == TypeKind.Pointer);
+
+			func_type = func_type->get_element_type();
+			assert(func_type->get_type_kind() == TypeKind.Function);
+
+			// if the function returns void, just append a ret void statement
+			var ret_type = func_type->get_return_type();
+			if(ret_type->get_type_kind() == TypeKind.Void) {
+				m_builder.build_ret_void();
+			} else {
+				throw new CompileError.PARSE_ERROR("Function ends without a return statement.");
+			}
+		}
 
 		m_builder = null;
 
