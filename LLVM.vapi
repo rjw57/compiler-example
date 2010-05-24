@@ -516,7 +516,7 @@ namespace LLVM {
 	}
 
 	[Compact]
-	[CCode (cname="struct LLVMOpaqueType", free_function="NULL")]
+	[CCode (cname="struct LLVMOpaqueType", free_function="")]
 	public class Ty {
 		/* array */
 		[CCode (cname = "LLVMArrayType")]
@@ -540,7 +540,7 @@ namespace LLVM {
 		public static Ty* float_in_context (Context c);
 		/* function */
 		[CCode (cname = "LLVMFunctionType")]
-		public static Ty* function (Ty return_type, [CCode (array_length_pos = 2.9)] Ty[] param_types, int is_var_arg = false);
+		public static Ty* function (Ty return_type, [CCode (array_length_pos = 2.9)] Ty*[] param_types, int is_var_arg = false);
 		[CCode (cname = "LLVMIsFunctionVarArg")]
 		public int is_function_var_arg (); /* function_ty */
 		[CCode (cname = "LLVMGetReturnType")]
