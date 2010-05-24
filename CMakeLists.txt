@@ -14,10 +14,8 @@ include(ValaVersion)
 find_package(PkgConfig)
 
 # Check LLVM is installed
-find_package(LLVM REQUIRED)
+find_package(LLVM QUIET REQUIRED COMPONENTS jit native interpreter)
 add_definitions(${LLVM_CPP_FLAGS})
-# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${LLVM_C_FLAGS}")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LLVM_CXX_FLAGS}")
 link_libraries(${LLVM_LIBRARIES})
 link_directories(${LLVM_LIBRARY_DIRS})
 include_directories(${LLVM_INCLUDE_DIRS})

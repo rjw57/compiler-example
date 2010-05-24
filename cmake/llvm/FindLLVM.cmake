@@ -27,7 +27,17 @@ macro(_llvm_config _var_name)
 	endif(NOT _llvm_config_exe)
 endmacro(_llvm_config)
 
-set(_llvm_components jit interpreter native)
+# The default set of components
+set(_llvm_components all)
+
+# If components have been specified via find_package, use them
+if(LLVM_FIND_COMPONENTS)
+	set(_llvm_components ${LLVM_FIND_COMPONENTS})
+endif(LLVM_FIND_COMPONENTS)
+
+if(NOT LLVM_FIND_QUIETLY)
+	message(STATUS "Looking for LLVM components: ${_llvm_components}")
+endif(NOT LLVM_FIND_QUIETLY)
 
 _llvm_config(LLVM_C_FLAGS --cflags ${_llvm_components})
 _llvm_config(LLVM_CXX_FLAGS --cxxflags ${_llvm_components})
@@ -40,6 +50,9 @@ _llvm_config(LLVM_LIBRARIES --libs ${_llvm_components})
 # all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(LLVM
-	DEFAULT_MSG LLVM_INCLUDE_DIRS LLVM_LIBRARY_DIRS)
+	DEFAULT_MSG 
+	LLVM_LIBRARIES
+	LLVM_INCLUDE_DIRS 
+	LLVM_LIBRARY_DIRS)
 
 # vim:sw=4:ts=4:autoindent
