@@ -1,0 +1,10 @@
+# Will be resolved as an external symbol
+def putchar int c : int;
+
+# The 'main' function will be called first in the program.
+def main {
+	putchar(65 /* 'A' */);
+	putchar(10 /* newline */);
+}
+
+# vim:sw=4:ts=4:autoindent

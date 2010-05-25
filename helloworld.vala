@@ -244,6 +244,15 @@ class Compiler {
 			m_function = new Function(llvm_module, func_decl.name, func_decl.llvm_type); 
 			m_function.call_conv = CallConv.C;
 
+			// peek at next token, if it is a ';' stop here, this is just a
+			// function declaration.
+			if(m_token_type == ';') {
+				m_function = null;
+				return;
+			}
+
+			// function now has a block which defines it
+
 			m_builder = new Builder();
 			var basic_block = m_function.append_basic_block("entry");
 			m_builder.position_at_end(basic_block);
@@ -417,20 +426,17 @@ class Compiler {
 		}
 
 		// statements are terminated by semi-colon.
-		while(m_token_type != ';') {
-			if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == RETURN)) {
-				// return statement
-				parse_return_statement();
-			} else {
-				// attempt to parse expression
-				parse_expression();
+		if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == RETURN)) {
+			// return statement
+			parse_return_statement();
+		} else {
+			// attempt to parse expression
+			parse_expression();
+		}
 
-				if(!check_token((TokenType)';')) {
-					throw new CompileError.PARSE_ERROR(
-							"Expect expression statement to have terminating semi-colon.");
-				}
-				next_token();
-			}
+		if(!check_token((TokenType)';')) {
+			throw new CompileError.PARSE_ERROR(
+					"Expect statement to have terminating semi-colon.");
 		}
 
 		// chomp semi-colon
