@@ -493,8 +493,7 @@ class Compiler {
 	}
 
 	private bool next_token_is_operator() {
-		return ((m_token_type == '+') || (m_token_type == '-') || 
-				(m_token_type == '*') || (m_token_type == '/'));
+		return (Posix.strchr("+-*/", (char) m_token_type) != null);
 	}
 
 	private int token_precedence(TokenType token) {
