@@ -8,6 +8,59 @@ errordomain CompileError {
 	PARSE_ERROR,			// A generic parse error.
 }
 
+class SymbolTable {
+	private LinkedList<HashMap<string,LLVM.Value*>> m_table = 
+		new LinkedList<HashMap<string,LLVM.Value*>>();
+
+	public SymbolTable() 
+	{
+		push_scope();
+	}
+
+	~SymbolTable()
+	{
+		pop_scope();
+	}
+
+	public void add_symbol(string name, LLVM.Value* value)
+	{
+		m_table.first().set(name, value);
+	}
+
+	public bool has_symbol_named(string name)
+	{
+		foreach(var map in m_table) 
+		{
+			if(map.has_key(name))
+				return true;
+		}
+
+		return false;
+	}
+
+	public LLVM.Value* get_symbol_named(string name)
+	{
+		foreach(var map in m_table) 
+		{
+			if(map.has_key(name)) {
+				return map.get(name);
+			}
+		}
+
+		return null;
+	}
+
+	public void push_scope()
+	{
+		m_table.insert(0, new HashMap<string,LLVM.Value*>());
+	}
+
+	public void pop_scope()
+	{
+		m_table.poll_head();
+	}
+}
+
 class Compiler {
 	private struct FilePosition {
 		uint line;
@@ -18,9 +71,7 @@ class Compiler {
 	private class FuncDecl {
 		public string 				name = null;
 		public Ty* 					llvm_type = null;
-
-		public ArrayList<Ty*>		argument_types = new ArrayList<Ty*>();
-		public ArrayList<string>	argument_names = new ArrayList<string>();
+		public HashMap<string, Ty*>	arguments = new HashMap<string, Ty*>();
 	}
 
 	// Special reserved word symbol values.
@@ -37,6 +88,8 @@ class Compiler {
 	// Current state
 	private Function			m_function = null;
 	private Builder				m_builder = null;
+
+	private SymbolTable			m_symbol_table = null;
 
 	// Property accessor for the wrapped LLVM module.
 	public unowned LLVM.Module? llvm_module { get { return m_llvm_module; } }
@@ -88,6 +141,9 @@ class Compiler {
 		llvm_module.add_type_name("void", Ty.void());
 		llvm_module.add_type_name("float", Ty.float());
 		llvm_module.add_type_name("int", Ty.int32());
+
+		// Create the symbol table
+		m_symbol_table = new SymbolTable();
 
 		parse_translation_unit();
 
@@ -156,6 +212,17 @@ class Compiler {
 		}
 	}
 
+	private void new_variable(string name, LLVM.Ty* type, LLVM.Value* initial_value = null)
+	{
+		LLVM.Value* alloca = m_builder.build_alloca(type, name);
+		m_symbol_table.add_symbol(name, alloca);
+
+		if(initial_value != null) 
+		{
+			m_builder.build_store(initial_value, alloca);
+		}
+	}
+
 	// parse a top-level function declaration
 	private void parse_top_level_declaration() throws CompileError
 	{
@@ -170,15 +237,62 @@ class Compiler {
 			var f = llvm_module.get_named_function(func_decl.name);
 			if(f != null) {
 				throw new CompileError.PARSE_ERROR(
-						"A function named '%s' already exists.", func_decl);
+						"A function named '%s' already exists.", func_decl.name);
 			}
 
 			// no existing function, create it.
 			m_function = new Function(llvm_module, func_decl.name, func_decl.llvm_type); 
 			m_function.call_conv = CallConv.C;
 
+			m_builder = new Builder();
+			var basic_block = m_function.append_basic_block("entry");
+			m_builder.position_at_end(basic_block);
+
+			// push a new scope
+			m_symbol_table.push_scope();
+
+			// add any arguments
+			if(func_decl.arguments.size > 0) 
+			{
+				// add function arguments as variables
+				uint arg_idx = 0;
+				foreach(var arg in func_decl.arguments)
+				{
+					new_variable(arg.key, arg.value, m_function.get_param(arg_idx));
+					arg_idx++;
+				}
+			}
+
 			// parse function block.
 			parse_block();
+
+			// terminate the function's basic block if appropriate
+			var bb = m_builder.get_insert_block();
+			var last_inst = bb->get_last_instruction();
+
+			if((last_inst == null) || !last_inst->is_a_terminator_inst()) 
+			{
+				// if we get here, there is no return statement.
+				var func_type = m_function.type_of();
+				assert(func_type->get_type_kind() == TypeKind.Pointer);
+
+				func_type = func_type->get_element_type();
+				assert(func_type->get_type_kind() == TypeKind.Function);
+
+				// if the function returns void, just append a ret void statement
+				var ret_type = func_type->get_return_type();
+				if(ret_type->get_type_kind() == TypeKind.Void) {
+					m_builder.build_ret_void();
+				} else {
+					throw new CompileError.PARSE_ERROR(
+							"Function ends without a return statement.");
+				}
+			}
+
+			m_builder = null;
+
+			// remove the scope
+			m_symbol_table.pop_scope();
 
 			// we've now moved out of the function.
 			m_function = null;
@@ -215,7 +329,7 @@ class Compiler {
 			return_type = parse_type_name();
 		}
 
-		decl.llvm_type = Ty.function( return_type, decl.argument_types.to_array(), 0 );
+		decl.llvm_type = Ty.function( return_type, decl.arguments.values.to_array(), 0 );
 
 		return decl;
 	}
@@ -225,18 +339,18 @@ class Compiler {
 		// function arguments are a comma separated list of type and argument name
 		bool keep_parsing = true;
 		while(keep_parsing) {
-			decl.argument_types.add( parse_type_name() );
+			LLVM.Ty* type = parse_type_name();
 
 			if(!check_token(TokenType.IDENTIFIER)) {
 				throw new CompileError.PARSE_ERROR("Expecting identifier to name argument.");
 			}
 
-			if(decl.argument_names.contains( m_token_value.identifier )) {
+			if(decl.arguments.has_key( m_token_value.identifier )) {
 				throw new CompileError.PARSE_ERROR("Function alreay has argument named '%s'.",
 						m_token_value.identifier);
 			}
 
-			decl.argument_names.add( m_token_value.identifier );
+			decl.arguments.set( m_token_value.identifier, type );
 
 			next_token();
 
@@ -267,7 +381,7 @@ class Compiler {
 		return type;
 	}
 
-	private LLVM.BasicBlock parse_block() throws CompileError
+	private void parse_block() throws CompileError
 	{
 		assert(m_function != null);
 
@@ -276,10 +390,7 @@ class Compiler {
 		}
 		next_token();
 
-		// append the new basic block.
-		var basic_block = m_function.append_basic_block("entry");
-		m_builder = new Builder();
-		m_builder.position_at_end(basic_block);
+		m_symbol_table.push_scope();
 
 		// parse function block.
 		while(m_token_type != TokenType.RIGHT_CURLY) {
@@ -287,31 +398,7 @@ class Compiler {
 			parse_statement();
 		}
 
-		// terminate the basic block if appropriate
-		var bb = m_builder.get_insert_block();
-		var last_inst = bb->get_last_instruction();
-
-		if((last_inst == null) || !last_inst->is_a_terminator_inst()) 
-		{
-			// if we get here, there is no return statement.
-			var func_type = m_function.type_of();
-			assert(func_type->get_type_kind() == TypeKind.Pointer);
-
-			func_type = func_type->get_element_type();
-			assert(func_type->get_type_kind() == TypeKind.Function);
-
-			// if the function returns void, just append a ret void statement
-			var ret_type = func_type->get_return_type();
-			if(ret_type->get_type_kind() == TypeKind.Void) {
-				m_builder.build_ret_void();
-			} else {
-				throw new CompileError.PARSE_ERROR("Function ends without a return statement.");
-			}
-		}
-
-		m_builder = null;
-
-		return basic_block;
+		m_symbol_table.pop_scope();
 	}
 	
 	private void parse_statement() throws CompileError
@@ -500,11 +587,15 @@ class Compiler {
 			string name = m_token_value.identifier;
 			next_token();
 
-			/* function call? */
-			if(!check_token(TokenType.LEFT_PAREN)) {
-				throw new CompileError.PARSE_ERROR("Expect '(' for function arguments.");
+			if(m_token_type != TokenType.LEFT_PAREN) {
+				/* a variable */
+				if(!m_symbol_table.has_symbol_named(name)) {
+					throw new CompileError.PARSE_ERROR("Unknown variable: '%s'.", name);
+				}
+
+				expression = m_builder.build_load(m_symbol_table.get_symbol_named(name));
 			} else {
-				/* do we have a function named this? */
+				/* a function call: do we have a function named this? */
 				LLVM.Function* f = llvm_module.get_named_function(name);
 
 				if(f == null) {

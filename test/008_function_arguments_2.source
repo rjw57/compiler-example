@@ -1,0 +1,14 @@
+def return_float float v : float {
+	ret v;
+}
+
+def return_float_plus_float float a, float b : float {
+	ret a + b;
+}
+
+# The 'main' function will be called first in the program.
+def main : float {
+	ret return_float ( 3.0 ) + return_float_plus_float ( 6.0, 7.0 + 6.0 ) * 2.0;
+}
+
+# vim:sw=4:ts=4:autoindent
