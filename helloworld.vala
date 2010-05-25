@@ -545,7 +545,14 @@ class Compiler {
 				lhs = m_builder.build_mul(lhs, rhs);
 			} else if(op == '/') {
 				check_compatible_types(lhs, rhs);
-				lhs = m_builder.build_fdiv(lhs, rhs);
+				TypeKind lhs_kind = lhs->type_of()->get_type_kind();
+				if(lhs_kind == TypeKind.Integer) {
+					lhs = m_builder.build_sdiv(lhs, rhs);
+				} else if(lhs_kind == TypeKind.Float) {
+					lhs = m_builder.build_fdiv(lhs, rhs);
+				} else {
+					throw new CompileError.PARSE_ERROR("Incompatible types for '/' operator.");
+				}
 			} else {
 				// should be unreachable.
 				assert(false);
