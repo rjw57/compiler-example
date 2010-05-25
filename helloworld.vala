@@ -1,4 +1,5 @@
 using LLVM;
+using Gee;
 
 // Potential errors
 errordomain CompileError {
@@ -13,9 +14,13 @@ class Compiler {
 		uint column;
 	}
 
-	private struct FuncDecl {
-		string 	name;
-		Ty* 	llvm_type;
+	[Compact]
+	private class FuncDecl {
+		public string 				name = null;
+		public Ty* 					llvm_type = null;
+
+		public ArrayList<Ty*>		argument_types = new ArrayList<Ty*>();
+		public ArrayList<string>	argument_names = new ArrayList<string>();
 	}
 
 	// Special reserved word symbol values.
@@ -148,8 +153,6 @@ class Compiler {
 			parse_top_level_declaration();
 			next_token(true);
 		}
-
-		llvm_module.dump();
 	}
 
 	// parse a top-level function declaration
@@ -186,7 +189,7 @@ class Compiler {
 	// parse a function declaration
 	private FuncDecl parse_function_declaration() throws CompileError
 	{
-		FuncDecl decl = { null, null };
+		FuncDecl decl = new FuncDecl(); 
 
 		// expect an identifier naming the function.
 		if(!check_token(TokenType.IDENTIFIER)) {
@@ -197,6 +200,11 @@ class Compiler {
 		
 		next_token();
 
+		// Any arguments?
+		if(m_token_type == TokenType.IDENTIFIER) {
+			parse_function_arguments(decl);
+		}
+
 		// Do we have a return type specified?
 		Ty* return_type = llvm_module.get_type_by_name("void");
 		if(m_token_type == ':') {
@@ -206,9 +214,38 @@ class Compiler {
 			return_type = parse_type_name();
 		}
 
-		decl.llvm_type = Ty.function( return_type, { }, 0 );
+		decl.llvm_type = Ty.function( return_type, decl.argument_types.to_array(), 0 );
 
 		return decl;
+	}
+
+	private void parse_function_arguments(FuncDecl decl) throws CompileError
+	{
+		// function arguments are a comma separated list of type and argument name
+		bool keep_parsing = true;
+		while(keep_parsing) {
+			decl.argument_types.add( parse_type_name() );
+
+			if(!check_token(TokenType.IDENTIFIER)) {
+				throw new CompileError.PARSE_ERROR("Expecting identifier to name argument.");
+			}
+
+			if(decl.argument_names.contains( m_token_value.identifier )) {
+				throw new CompileError.PARSE_ERROR("Function alreay has argument named '%s'.",
+						m_token_value.identifier);
+			}
+
+			decl.argument_names.add( m_token_value.identifier );
+
+			next_token();
+
+			if(m_token_type == TokenType.COMMA) {
+				keep_parsing = true;
+				next_token(); // chomp comma
+			} else {
+				keep_parsing = false;
+			}
+		}
 	}
 
 	private LLVM.Ty* parse_type_name() throws CompileError
@@ -297,7 +334,14 @@ class Compiler {
 				// return statement
 				parse_return_statement();
 			} else {
-				throw new CompileError.PARSE_ERROR("Error parsing statement.");
+				// attempt to parse expression
+				parse_expression();
+
+				if(!check_token((TokenType)';')) {
+					throw new CompileError.PARSE_ERROR(
+							"Expect expression statement to have terminating semi-colon.");
+				}
+				next_token();
 			}
 		}
 

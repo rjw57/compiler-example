@@ -38,12 +38,20 @@ link_libraries(${GOBJECT_LIBRARIES})
 link_directories(${GOBJECT_LIBRARY_DIRS})
 include_directories(${GOBJECT_INCLUDE_DIRS})
 
+# Check libgee is installed
+pkg_check_modules(GEE REQUIRED gee-1.0)
+add_definitions(${GEE_CFLAGS} ${GEE_CFLAGS_OTHER})
+link_libraries(${GEE_LIBRARIES})
+link_directories(${GEE_LIBRARY_DIRS})
+include_directories(${GEE_INCLUDE_DIRS})
+
 vala_precompile(HELLOWORLD_C
 	"helloworld.vala"
 CUSTOM_VAPIS
 	LLVM.vapi
 PACKAGES
 	posix
+	gee-1.0
 )
 
 add_executable("hello" ${HELLOWORLD_C})

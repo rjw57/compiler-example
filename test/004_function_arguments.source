@@ -1,0 +1,32 @@
+def arg0 float foo : void {
+	ret;
+}
+def arg1 float foo : float {
+	ret (3.0 * -4.0) + 5.0;
+}
+
+def arg2 float foo, float bar : float {
+	ret (3.0 * -4.0) + 5.0;
+}
+
+def arg3 float foo, float bar, float buzz : float {
+	ret (3.0 * -4.0) + 5.0;
+}
+
+def arg4 float foo, float bar, float buzz {
+}
+
+def arg5 float foo, float buzz {
+}
+
+def arg6 float buzz {
+}
+
+# The 'main' function will be called first in the program.
+def main : float {
+	0.4;
+	0.6 * 7.0;
+	ret 0.3 + 0.5;
+}
+
+# vim:sw=4:ts=4:autoindent
