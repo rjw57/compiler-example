@@ -514,12 +514,24 @@ class Compiler {
 
 				/* parse arguments */
 				next_token();
+				var arguments = new ArrayList<LLVM.Value*>();
 				while(m_token_type != TokenType.RIGHT_PAREN) {
-					throw new CompileError.PARSE_ERROR("Function arguments not supported.");
+					/* parse expression */
+					arguments.add( parse_expression() );
+
+					if(m_token_type != TokenType.RIGHT_PAREN) {
+						/* we should be separated by commas */
+						if(!check_token(TokenType.COMMA)) {
+							throw new CompileError.PARSE_ERROR(
+									"Function arguments should be separated by commas.");
+						}
+
+						next_token(); // chomp comma
+					}
 				}
 
 				/* do call */
-				expression = m_builder.build_call(f, { });
+				expression = m_builder.build_call(f, arguments.to_array());
 
 				next_token();
 			}
@@ -546,6 +558,7 @@ void main(string[] argv)
 		var c = new Compiler();
 		try {
 			c.compile_source_file(file_name);
+			c.llvm_module.dump();
 
 			stdout.printf("Verifying %s.\n", file_name);
 			Message error;
