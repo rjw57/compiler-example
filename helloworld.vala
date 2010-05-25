@@ -87,6 +87,7 @@ class Compiler {
 		// Add our standard types
 		llvm_module.add_type_name("void", Ty.void());
 		llvm_module.add_type_name("float", Ty.float());
+		llvm_module.add_type_name("int", Ty.int32());
 
 		parse_translation_unit();
 
@@ -477,7 +478,7 @@ class Compiler {
 
 			next_token(); // chomp bracket
 		} else if(m_token_type == TokenType.INT) {
-			expression = Constant.const_real( Ty.int32(), m_token_value.int );
+			expression = Constant.const_int( Ty.int32(), (uint) m_token_value.int, 1 );
 			next_token();
 		} else if(m_token_type == TokenType.FLOAT) {
 			expression = Constant.const_real( Ty.float(), m_token_value.float );

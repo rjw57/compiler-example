@@ -1,0 +1,14 @@
+def return_4 : int {
+	ret 4;
+}
+
+def return_7 : int {
+	ret 7;
+}
+
+# The 'main' function will be called first in the program.
+def main : int {
+	ret return_4 () + return_7 () * 2;
+}
+
+# vim:sw=4:ts=4:autoindent
