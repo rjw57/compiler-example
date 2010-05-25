@@ -1,0 +1,30 @@
+def ret_true : bool {
+	ret true;
+}
+
+def ret_false : bool {
+	ret false;
+}
+
+def test_equality_1 : bool {
+	ret true is true;
+}
+
+def test_equality_2 : bool {
+	ret true is false;
+}
+
+def test_equality_3 : bool {
+	ret true isnot true;
+}
+
+def test_equality_4 : bool {
+	ret true isnot false;
+}
+
+# The 'main' function will be called first in the program.
+def main : bool {
+	ret true;
+}
+
+# vim:sw=4:ts=4:autoindent

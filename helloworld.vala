@@ -77,6 +77,10 @@ class Compiler {
 	// Special reserved word symbol values.
 	private const string DEFINE_FUNCTION = "DEFINE_FUNCTION";
 	private const string RETURN = "RETURN";
+	private const string TRUE = "TRUE";
+	private const string FALSE = "FALSE";
+	private const string IS_EQUAL = "IS_EQUAL";
+	private const string IS_NOT_EQUAL = "IS_NOT_EQUAL";
 
 	private LLVM.Module 		m_llvm_module = null;
 	private unowned Scanner		m_current_scanner = null;
@@ -126,6 +130,10 @@ class Compiler {
 		// There are some reserved words (aka 'symbols') in our language.
 		scanner.scope_add_symbol(0, "def", DEFINE_FUNCTION);
 		scanner.scope_add_symbol(0, "ret", RETURN);
+		scanner.scope_add_symbol(0, "true", TRUE);
+		scanner.scope_add_symbol(0, "false", FALSE);
+		scanner.scope_add_symbol(0, "is", IS_EQUAL);
+		scanner.scope_add_symbol(0, "isnot", IS_NOT_EQUAL);
 
 		// set this as the current scanner.
 		m_current_scanner = scanner;
@@ -141,6 +149,7 @@ class Compiler {
 		llvm_module.add_type_name("void", Ty.void());
 		llvm_module.add_type_name("float", Ty.float());
 		llvm_module.add_type_name("int", Ty.int32());
+		llvm_module.add_type_name("bool", Ty.int1());
 
 		// Create the symbol table
 		m_symbol_table = new SymbolTable();
@@ -493,15 +502,33 @@ class Compiler {
 	}
 
 	private bool next_token_is_operator() {
-		return (Posix.strchr("+-*/", (char) m_token_type) != null);
+		if(m_token_type == TokenType.SYMBOL) {
+			if((m_token_value.symbol == IS_EQUAL) || (m_token_value.symbol == IS_NOT_EQUAL))
+				return true;
+		}
+
+		if((m_token_type > TokenType.EOF) && (m_token_type < TokenType.NONE)) {
+			return (Posix.strchr("+-*/", (char) m_token_type) != null);
+		}
+
+		return false;
 	}
 
-	private int token_precedence(TokenType token) {
+	private int token_precedence(TokenType token, TokenValue value) {
 		if((token == '+') || (token == '-'))
-			return 10;
+			return 120;
 
 		if((token == '*') || (token == '/'))
-			return 20;
+			return 130;
+
+		if(token == TokenType.SYMBOL) 
+		{
+			if((value.symbol == IS_EQUAL) || (value.symbol == IS_NOT_EQUAL)) 
+				return 90;
+		}
+
+		// shouldn't be reached
+		assert(false);
 
 		return 0;
 	}
@@ -518,20 +545,22 @@ class Compiler {
 	private LLVM.Value* parse_expression_1(LLVM.Value* lhs, int min_precedence) 
 		throws CompileError
 	{
+
 		while(next_token_is_operator() &&
-				(token_precedence(m_token_type) >= min_precedence))
+				(token_precedence(m_token_type, m_token_value) >= min_precedence))
 		{
 			TokenType op = m_token_type;
+			TokenValue op_value = m_token_value;
+
 			next_token(); // chomp the operator
-			int op_precedence = token_precedence(op);
+			int op_precedence = token_precedence(op, op_value);
 
 			LLVM.Value* rhs = parse_primary();
 
 			while(next_token_is_operator() &&
-				(token_precedence(m_token_type) > op_precedence) )
+				(token_precedence(m_token_type, m_token_value) > op_precedence) )
 			{
-				TokenType lookahead = m_token_type;
-				rhs = parse_expression_1( rhs, token_precedence(lookahead) );
+				rhs = parse_expression_1( rhs, token_precedence(m_token_type, m_token_value) );
 			}
 
 			if(op == '+') {
@@ -552,6 +581,26 @@ class Compiler {
 					lhs = m_builder.build_fdiv(lhs, rhs);
 				} else {
 					throw new CompileError.PARSE_ERROR("Incompatible types for '/' operator.");
+				}
+			} else if((op == TokenType.SYMBOL) && (op_value.symbol == IS_EQUAL)) {
+				check_compatible_types(lhs, rhs);
+				TypeKind lhs_kind = lhs->type_of()->get_type_kind();
+				if(lhs_kind == TypeKind.Integer) {
+					lhs = m_builder.build_icmp(IntPredicate.EQ, lhs, rhs);
+				} else if(lhs_kind == TypeKind.Float) {
+					lhs = m_builder.build_fcmp(RealPredicate.OEQ, lhs, rhs);
+				} else {
+					throw new CompileError.PARSE_ERROR("Incompatible types for 'is' operator.");
+				}
+			} else if((op == TokenType.SYMBOL) && (op_value.symbol == IS_NOT_EQUAL)) {
+				check_compatible_types(lhs, rhs);
+				TypeKind lhs_kind = lhs->type_of()->get_type_kind();
+				if(lhs_kind == TypeKind.Integer) {
+					lhs = m_builder.build_icmp(IntPredicate.NE, lhs, rhs);
+				} else if(lhs_kind == TypeKind.Float) {
+					lhs = m_builder.build_fcmp(RealPredicate.ONE, lhs, rhs);
+				} else {
+					throw new CompileError.PARSE_ERROR("Incompatible types for 'isnot' operator.");
 				}
 			} else {
 				// should be unreachable.
@@ -638,6 +687,12 @@ class Compiler {
 
 				next_token();
 			}
+		} else if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == TRUE)) {
+			expression = Constant.const_int( Ty.int1(), 1, 1);
+			next_token();
+		} else if((m_token_type == TokenType.SYMBOL) && (m_token_value.symbol == FALSE)) {
+			expression = Constant.const_int( Ty.int1(), 0, 1);
+			next_token();
 		} else {
 			throw new CompileError.PARSE_ERROR("Error parsing expression.");
 		}
