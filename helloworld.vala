@@ -495,6 +495,33 @@ class Compiler {
 
 			check_compatible_types(lhs, rhs);
 			expression = m_builder.build_mul(lhs, rhs); 
+		} else if(m_token_type == TokenType.IDENTIFIER) {
+			string name = m_token_value.identifier;
+			next_token();
+
+			/* function call? */
+			if(!check_token(TokenType.LEFT_PAREN)) {
+				throw new CompileError.PARSE_ERROR("Expect '(' for function arguments.");
+			} else {
+				/* do we have a function named this? */
+				LLVM.Function* f = llvm_module.get_named_function(name);
+
+				if(f == null) {
+					throw new CompileError.PARSE_ERROR("No such function '%s' defined.",
+							name);
+				}
+
+				/* parse arguments */
+				next_token();
+				while(m_token_type != TokenType.RIGHT_PAREN) {
+					throw new CompileError.PARSE_ERROR("Function arguments not supported.");
+				}
+
+				/* do call */
+				expression = m_builder.build_call(f, { });
+
+				next_token();
+			}
 		} else {
 			throw new CompileError.PARSE_ERROR("Error parsing expression.");
 		}
